@@ -99,7 +99,8 @@ static void zynqmp_sdhci_realize(DeviceState *dev, Error **errp)
 {
     DeviceClass *dc_parent = DEVICE_CLASS(ZYNQMP_SDHCI_PARENT_CLASS);
     ZynqMPSDHCIState *s = ZYNQMP_SDHCI(dev);
-    DriveInfo *di_sd, *di_mmc;
+    DriveInfo *di_sd = NULL;
+    DriveInfo *di_mmc = NULL;
     DeviceState *carddev_sd;
     static int index_offset = 0;
 
@@ -122,21 +123,10 @@ static void zynqmp_sdhci_realize(DeviceState *dev, Error **errp)
                               OBJECT(carddev_sd));
     object_property_set_bool(OBJECT(carddev_sd), "spi", false, &error_fatal);
 
-    /*
-     * drive_index is used to attach a card in SD mode.
-     * drive_index + 2 is used to attach a card in MMC mode.
-     *
-     * If the user attaches a card to both slots, we bail out.
-     */
-
-    di_sd = drive_get_by_index(IF_SD , s->drive_index);
-    di_mmc = drive_get_by_index(IF_SD, (s->drive_index + 2));
-
-    if (di_sd && di_mmc) {
-        if (!di_sd->is_default && !di_mmc->is_default) {
-            error_setg(&error_fatal, "Cannot attach both an MMC"
-                                     " and an SD card into the same slot");
-        }
+    if (s->is_mmc) {
+        di_mmc = drive_get_by_index(IF_SD, s->drive_index);
+    } else {
+        di_sd = drive_get_by_index(IF_SD , s->drive_index);
     }
 
     if (di_sd) {
@@ -148,7 +138,6 @@ static void zynqmp_sdhci_realize(DeviceState *dev, Error **errp)
         qdev_prop_set_uint8(carddev_sd, "spec_version", SD_PHY_SPECv3_01_VERS);
         qdev_prop_set_drive(carddev_sd, "drive", blk_by_legacy_dinfo(di_mmc));
         object_property_set_bool(OBJECT(carddev_sd), "mmc", true, &error_fatal);
-        s->is_mmc = true;
     }
 
     qdev_realize(carddev_sd,
@@ -162,6 +151,7 @@ static void zynqmp_sdhci_realize(DeviceState *dev, Error **errp)
 
 static Property zynqmp_sdhci_properties[] = {
     DEFINE_PROP_UINT8("drive-index", ZynqMPSDHCIState, drive_index, 0),
+    DEFINE_PROP_BOOL("is_mmc", ZynqMPSDHCIState, is_mmc, true),
     DEFINE_PROP_END_OF_LIST(),
 };
 
